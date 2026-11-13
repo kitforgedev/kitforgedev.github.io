@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI rules sanity check (.mdc, CLAUDE.md, AGENTS.md) - KitForge</title>
+<meta name="description" content="Paste a Cursor .mdc rule or a CLAUDE.md / AGENTS.md file and get instant structural checks: frontmatter, globs, size, and common mistakes. Free, runs in your browser, nothing is uploaded.">
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --ink:#e8ecf1; --dim:#9aa6b2; --accent:#6ee7b7; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:1.9rem; line-height:1.2; margin:0 0 8px; }
+  h2 { font-size:1.15rem; margin:32px 0 8px; }
+  p.sub { color:var(--dim); margin:0 0 24px; }
+  textarea { width:100%; min-height:220px; background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:10px; padding:14px; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  button { background:var(--accent); color:#06281c; border:0; border-radius:8px; padding:12px 22px; font-size:1rem; font-weight:600; cursor:pointer; }
+  .ghost { background:transparent; color:var(--dim); border:1px solid #2a3340; }
+  .result { margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--card); border:1px solid #2a3340; display:flex; gap:12px; align-items:flex-start; }
+  .result .icon { font-size:1.1rem; line-height:1.4; }
+  .result.pass { border-left:4px solid var(--accent); }
+  .result.warn { border-left:4px solid var(--warn); }
+  .result.fail { border-left:4px solid var(--bad); }
+  .result .t { font-weight:600; }
+  .result .d { color:var(--dim); font-size:.9rem; margin-top:2px; }
+  .muted { color:var(--dim); font-size:.85rem; }
+  a { color:var(--accent); }
+  .cta { margin-top:36px; padding:20px; border:1px solid var(--accent); border-radius:12px; }
+  .privacy { color:var(--dim); font-size:.8rem; margin-top:10px; }
+  .summary { margin-top:24px; font-size:1.05rem; }
+  #out { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AI rules sanity check</h1>
+  <p class="sub">Paste a Cursor <code>.mdc</code> rule, a <code>CLAUDE.md</code>, or an <code>AGENTS.md</code> below. This runs structural checks that catch the most common reasons an assistant silently ignores a rule file. It is a sanity check, not a full linter - and it runs entirely in your browser.</p>
+
+  <textarea id="src" placeholder="Paste your rule file here..." spellcheck="false"></textarea>
+  <div class="row">
+    <button id="go">Run checks</button>
+    <button class="ghost" id="sample">Try a broken .mdc example</button>
+  </div>
+  <p class="privacy">Runs entirely in this tab. Close it and your text is gone.</p>
+
+  <div id="out">
+    <p class="summary" id="summary"></p>
+    <div id="results"></div>
+
+    <h2>What this checks (and what it can't)</h2>
+    <p class="muted">These are structural checks: things that are verifiably right or wrong from the file's text. Whether your rules are <em>good instructions</em> - specific, testable, ordered - is a judgment this page doesn't make. Format references: Cursor's .mdc frontmatter (description, globs, alwaysApply) follows Cursor's public docs; Claude Code loads CLAUDE.md at session start; AGENTS.md is the cross-tool convention adopted by several agents. Token estimates use the rough 4-characters-per-token average and can be off in either direction.</p>
+
+    <div class="cta">
+      <strong>Want rules that pass on the first try?</strong> The Agentic Coding Kit ships tested CLAUDE.md presets for 5 stacks and 6 Cursor .mdc rules with correct frontmatter, plus the hooks that enforce them.
+      <a href="https://kitforgedev.itch.io/agentic-coding-kit">Get the free sampler on itch.io</a> - and if your file is long, run it through the <a href="/claude-md-cost/">cost checker</a> too.
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+$('go').onclick = () => run($('src').value);
+$('sample').onclick = () => {
+  $('src').value = `---
+alwaysApply: true
+globs: src/**/*.ts, src/**/*.tsx
+---
+# Frontend rules
+
+Try to use functional components. Please remember to maybe add tests when you can.
+Always use the design system. Never use inline styles. Sometimes the design system has no matching component, then inline styles are fine.
+
+` + 'x'.repeat(3000);
+  run($('src').value);
+};
+
+function parseFrontmatter(text) {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!m) return null;
+  const fm = {};
+  m[1].split('\n').forEach(line => {
+    const kv = line.match(/^\s*([\w-]+)\s*:\s*(.*)$/);
+    if (kv) fm[kv[1].trim()] = kv[2].trim().replace(/^["']|["']$/g, '');
+  });
+  return { fm, body: text.slice(m[0].length) };
+}
+
+function checkGlob(g) {
+  const issues = [];
+  if (/\s/.test(g.trim())) issues.push('contains a space');
+  const open = (g.match(/\{/g) || []).length, close = (g.match(/\}/g) || []).length;
+  if (open !== close) issues.push('unbalanced braces');
+  if (!/[\w*?{[\]]/.test(g)) issues.push('no recognizable pattern characters');
+  return issues;
+}
+
+function run(text) {
+  if (!text.trim()) return;
+  const results = [];
+  const add = (cls, t, d) => results.push({ cls, t, d });
+  const chars = text.length;
+  const tokens = Math.round(chars / 4);
+  const looksMdc = /^---\r?\n/.test(text) || /alwaysApply|globs\s*:/.test(text.slice(0, 400));
+
+  if (looksMdc) {
+    const parsed = parseFrontmatter(text);
+    if (!parsed) {
+      add('fail', 'Unparseable frontmatter', 'The file starts like an .mdc rule but the --- frontmatter block does not close properly. Cursor will not read the metadata.');
+    } else {
+      const { fm, body } = parsed;
+      const hasDesc = 'description' in fm && fm.description.length > 0;
+      const hasGlobs = 'globs' in fm && fm.globs.length > 0;
+      const always = (fm.alwaysApply || '').toLowerCase() === 'true';
+      if (hasDesc) add('pass', 'description present', 'Agents that pick rules by description can route this one. "' + esc(fm.description.slice(0, 80)) + (fm.description.length > 80 ? '...' : '') + '"');
+      else add('fail', 'No description', 'Without a description, agent-selected rules have nothing to match against. Add one sentence saying when this rule applies.');
+      if (always && hasGlobs) add('warn', 'alwaysApply: true AND globs set', 'With alwaysApply: true the globs are ignored - the rule loads every time. Drop one: keep globs for file-scoped rules, or alwaysApply for global ones.');
+      if (!always && !hasGlobs && !hasDesc) add('fail', 'Rule can never activate', 'alwaysApply is not true, no globs are set, and there is no description - Cursor has no way to decide when to load this rule.');
+      if (!always && hasGlobs) {
+        const globs = fm.globs.split(',').map(g => g.trim()).filter(Boolean);
+        let bad = [];
+        globs.forEach(g => { const i = checkGlob(g); if (i.length) bad.push('"' + esc(g) + '" (' + i.join(', ') + ')'); });
+        if (bad.length) add('fail', bad.length + ' of ' + globs.length + ' glob patterns look broken', bad.join('; ') + '. A broken glob silently matches nothing.');
+        else add('pass', globs.length + ' glob pattern' + (globs.length > 1 ? 's' : '') + ' structurally OK', esc(globs.join(', ')));
+      }
+      if (!always && !hasGlobs && hasDesc) add('pass', 'Agent-selected rule', 'No globs and not always-on: this rule activates by description matching. The description carries everything, so keep it specific.');
+      if (!body.trim()) add('warn', 'Empty rule body', 'Frontmatter is present but there is no actual instruction below it.');
+    }
+  } else {
+    add('pass', 'Recognized as a plain instruction file', 'No .mdc frontmatter detected - treating this as CLAUDE.md / AGENTS.md style content.');
+  }
+
+  if (tokens > 4000) add('warn', 'Large file: ~' + tokens.toLocaleString('en-US') + ' est. tokens', 'Roughly ' + (tokens / 2000).toFixed(1) + '% of a 200k context window (4 chars/token estimate). Long standing files cost context every session and are harder to keep current - consider splitting reference material into linked docs.');
+  else add('pass', 'Size: ~' + tokens.toLocaleString('en-US') + ' est. tokens', 'Small enough to stay cheap in context. Estimate only (chars / 4).');
+
+  const lines = text.split('\n').map((l, i) => ({ i: i + 1, l }));
+  const contradictions = [];
+  const hasAlways = lines.filter(x => /\balways\b/i.test(x.l));
+  const hasNever = lines.filter(x => /\bnever\b/i.test(x.l));
+  const soften = lines.filter(x => /\b(sometimes|if needed|when you can|if possible|occasionally)\b/i.test(x.l));
+  if (hasAlways.length && soften.length) contradictions.push('line ' + hasAlways[0].i + ' says "always" but line ' + soften[0].i + ' carves out an exception');
+  if (hasNever.length && soften.length) contradictions.push('line ' + hasNever[0].i + ' says "never" but line ' + soften[0].i + ' carves out an exception');
+  if (contradictions.length) add('warn', 'Possible contradiction', esc(contradictions[0]) + '. Absolute rules with scattered exceptions are a common reason agents follow neither. Put the exception inside the rule itself.');
+  else add('pass', 'No absolute-with-exception pattern found', 'No "always/never" rule clashing with a "sometimes/if possible" line.');
+
+  const vague = lines.filter(x => /\b(try to|maybe|please remember|if you can|consider)\b/i.test(x.l));
+  if (vague.length) add('warn', vague.length + ' soft instruction line' + (vague.length > 1 ? 's' : ''), 'Lines ' + vague.slice(0, 5).map(x => x.i).join(', ') + ' use hedged wording ("try to", "maybe", "if you can"). Agents treat hedges as optional. Make it a rule or delete it.');
+  else add('pass', 'No hedged instructions', 'Every instruction line reads as a rule, not a suggestion.');
+
+  const fails = results.filter(r => r.cls === 'fail').length;
+  const warns = results.filter(r => r.cls === 'warn').length;
+  $('summary').innerHTML = fails ? '<strong style="color:var(--bad)">' + fails + ' problem' + (fails > 1 ? 's' : '') + ' that will break loading</strong>' + (warns ? ' and ' + warns + ' warning' + (warns > 1 ? 's' : '') : '') + ':'
+    : warns ? '<strong style="color:var(--warn)">No load-breaking problems</strong>, ' + warns + ' thing' + (warns > 1 ? 's' : '') + ' worth fixing:'
+    : '<strong style="color:var(--accent)">All checks pass.</strong>';
+  $('results').innerHTML = results.map(r => {
+    const icon = r.cls === 'pass' ? '&#9989;' : r.cls === 'warn' ? '&#9888;&#65039;' : '&#10060;';
+    return '<div class="result ' + r.cls + '"><div class="icon">' + icon + '</div><div><div class="t">' + r.t + '</div><div class="d">' + r.d + '</div></div></div>';
+  }).join('');
+  $('out').style.display = 'block';
+  $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+</body>
+</html>
