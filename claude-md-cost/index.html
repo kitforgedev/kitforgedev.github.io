@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What does your CLAUDE.md cost? - KitForge</title>
+<meta name="description" content="Paste your CLAUDE.md and see what it costs every session: estimated tokens, share of the context window, and price per session. Free, runs in your browser, nothing is uploaded.">
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --ink:#e8ecf1; --dim:#9aa6b2; --accent:#6ee7b7; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:1.9rem; line-height:1.2; margin:0 0 8px; }
+  h2 { font-size:1.15rem; margin:32px 0 8px; }
+  p.sub { color:var(--dim); margin:0 0 28px; }
+  textarea { width:100%; min-height:220px; background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:10px; padding:14px; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  button { background:var(--accent); color:#06281c; border:0; border-radius:8px; padding:12px 22px; font-size:1rem; font-weight:600; cursor:pointer; }
+  .ghost { background:transparent; color:var(--dim); border:1px solid #2a3340; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:24px; }
+  .card { background:var(--card); border:1px solid #2a3340; border-radius:10px; padding:16px; }
+  .card .n { font-size:1.5rem; font-weight:700; }
+  .card .l { color:var(--dim); font-size:.82rem; margin-top:2px; }
+  .verdict { margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--card); border:1px solid #2a3340; }
+  .verdict.good { border-color:var(--accent); }
+  .verdict.meh { border-color:var(--warn); }
+  .verdict.bad { border-color:var(--bad); }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font:13px/1.4 ui-monospace,Menlo,monospace; }
+  td, th { text-align:left; padding:6px 8px; border-bottom:1px solid #2a3340; }
+  th { color:var(--dim); font-weight:600; }
+  .muted { color:var(--dim); font-size:.85rem; }
+  a { color:var(--accent); }
+  .cta { margin-top:36px; padding:20px; border:1px solid var(--accent); border-radius:12px; }
+  .privacy { color:var(--dim); font-size:.8rem; margin-top:10px; }
+  #out { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>What does your CLAUDE.md cost you?</h1>
+  <p class="sub">Every Claude Code session starts by reading your project's instruction file. Paste yours below and see what that read actually costs. Nothing leaves your browser - this page has no server and no analytics on your text.</p>
+
+  <textarea id="src" placeholder="Paste your CLAUDE.md here..." spellcheck="false"></textarea>
+  <div class="row">
+    <button id="go">Measure it</button>
+    <button class="ghost" id="sample">Try a 2,000-line example</button>
+  </div>
+  <p class="privacy">Runs entirely in this tab. Close it and your text is gone.</p>
+
+  <div id="out">
+    <div class="cards">
+      <div class="card"><div class="n" id="cLines">-</div><div class="l">lines</div></div>
+      <div class="card"><div class="n" id="cChars">-</div><div class="l">characters</div></div>
+      <div class="card"><div class="n" id="cTok">-</div><div class="l">est. tokens (chars / 4)</div></div>
+      <div class="card"><div class="n" id="cWin">-</div><div class="l">of a 200k context window</div></div>
+      <div class="card"><div class="n" id="cCost">-</div><div class="l">est. input cost per session</div></div>
+      <div class="card"><div class="n" id="cYear">-</div><div class="l">est. per year, 20 sessions/week</div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+
+    <h2>Your most expensive lines</h2>
+    <p class="muted">The ten longest lines, by estimated tokens. Long prose lines are usually the first thing to move into a linked doc the agent reads only when needed.</p>
+    <table><thead><tr><th>#</th><th>line</th><th>est. tokens</th><th>preview</th></tr></thead><tbody id="rows"></tbody></table>
+
+    <h2>How this estimate works</h2>
+    <p class="muted">Token estimate: characters divided by 4 (a rough average for English + code; a real tokenizer will differ, usually by less than 20%). Cost estimate: $3 per million input tokens, a typical mid-tier model list price at the time of writing - check your provider's current pricing. Prompt caching can reduce repeat-read cost substantially; this shows the uncached worst case. The context-window figure assumes a 200k window.</p>
+
+    <div class="cta">
+      <strong>Want the lean version?</strong> The Agentic Coding Kit ships CLAUDE.md templates built to stay small, a rule-enforcement hook, and the splitting pattern that keeps big docs out of the context window until they're needed.
+      <a href="https://kitforgedev.itch.io/agentic-coding-kit">Get the free sampler on itch.io</a>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US');
+$('go').onclick = () => analyze($('src').value);
+$('sample').onclick = () => {
+  let s = '# Project instructions\n\n';
+  for (let i = 1; i <= 2000; i++) {
+    s += (i % 7 === 0)
+      ? '- Remember: always run the full integration suite before claiming any task is done, and never skip the migration checks even when the change looks trivial.\n'
+      : '- Rule ' + i + ': follow the established conventions for module ' + (i % 40) + '.\n';
+  }
+  $('src').value = s;
+  analyze(s);
+};
+function analyze(text) {
+  if (!text.trim()) return;
+  const chars = text.length;
+  const lines = text.split('\n');
+  const tokens = Math.round(chars / 4);
+  const win = tokens / 200000;
+  const cost = tokens / 1e6 * 3;
+  const year = cost * 20 * 52;
+  $('cLines').textContent = fmt(lines.length);
+  $('cChars').textContent = fmt(chars);
+  $('cTok').textContent = fmt(tokens);
+  $('cWin').textContent = (win * 100).toFixed(1) + '%';
+  $('cCost').textContent = cost < 0.01 ? '< $0.01' : '$' + cost.toFixed(3);
+  $('cYear').textContent = year < 1 ? '< $1' : '$' + fmt(Math.round(year));
+  const v = $('verdict');
+  if (win < 0.02) {
+    v.className = 'verdict good';
+    v.innerHTML = '<strong>Lean.</strong> Under 2% of the context window. Your instructions are cheap to re-read every session - keep them this way.';
+  } else if (win < 0.10) {
+    v.className = 'verdict meh';
+    v.innerHTML = '<strong>Getting heavy.</strong> Over 2% of every window goes to standing instructions. Move reference material into linked docs the agent opens only when it needs them.';
+  } else {
+    v.className = 'verdict bad';
+    v.innerHTML = '<strong>Expensive.</strong> More than 10% of every context window is spent before the first prompt. Long instructions also dilute each other - rules near the middle get ignored. Split hard.';
+  }
+  const longest = lines
+    .map((l, i) => ({ i: i + 1, l, t: Math.round(l.length / 4) }))
+    .filter(x => x.t > 0)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, 10);
+  $('rows').innerHTML = longest.map((x, k) => {
+    const prev = x.l.trim().slice(0, 70).replace(/&/g,'&amp;').replace(/</g,'&lt;') + (x.l.length > 70 ? '...' : '');
+    return '<tr><td>' + (k+1) + '</td><td>' + x.i + '</td><td>' + fmt(x.t) + '</td><td>' + prev + '</td></tr>';
+  }).join('');
+  $('out').style.display = 'block';
+  $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+</body>
+</html>
