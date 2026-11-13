@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>What does your CLAUDE.md cost? - KitForge</title>
-<meta name="description" content="Paste your CLAUDE.md and see what it costs every session: estimated tokens, share of the context window, and price per session. Free, runs in your browser, nothing is uploaded.">
+<meta name="description" content="Paste your CLAUDE.md and estimate its size in tokens, its share of the context window, and its API input cost per session. Free, runs in your browser, nothing is uploaded.">
 <style>
   :root { --bg:#0e1116; --card:#171c24; --ink:#e8ecf1; --dim:#9aa6b2; --accent:#6ee7b7; --warn:#fbbf24; --bad:#f87171; }
   * { box-sizing:border-box; }
@@ -14,13 +14,15 @@
   h2 { font-size:1.15rem; margin:32px 0 8px; }
   p.sub { color:var(--dim); margin:0 0 28px; }
   textarea { width:100%; min-height:220px; background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:10px; padding:14px; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
-  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; align-items:center; }
   button { background:var(--accent); color:#06281c; border:0; border-radius:8px; padding:12px 22px; font-size:1rem; font-weight:600; cursor:pointer; }
   .ghost { background:transparent; color:var(--dim); border:1px solid #2a3340; }
+  select { background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:8px; padding:10px; font-size:.95rem; }
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:24px; }
   .card { background:var(--card); border:1px solid #2a3340; border-radius:10px; padding:16px; }
   .card .n { font-size:1.5rem; font-weight:700; }
   .card .l { color:var(--dim); font-size:.82rem; margin-top:2px; }
+  .assume { margin-top:14px; padding:12px 16px; border-radius:10px; background:#12161d; border:1px dashed #2a3340; color:var(--dim); font-size:.85rem; }
   .verdict { margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--card); border:1px solid #2a3340; }
   .verdict.good { border-color:var(--accent); }
   .verdict.meh { border-color:var(--warn); }
@@ -38,12 +40,20 @@
 <body>
 <main>
   <h1>What does your CLAUDE.md cost you?</h1>
-  <p class="sub">Every Claude Code session starts by reading your project's instruction file. Paste yours below and see what that read actually costs. Nothing leaves your browser - this page has no server and no analytics on your text.</p>
+  <p class="sub">Claude Code loads your project's CLAUDE.md into context at the start of every session. Paste yours below for an estimate of its size and what that read costs on the API. Nothing leaves your browser - this page has no server and no analytics on your text.</p>
 
   <textarea id="src" placeholder="Paste your CLAUDE.md here..." spellcheck="false"></textarea>
   <div class="row">
     <button id="go">Measure it</button>
     <button class="ghost" id="sample">Try a 2,000-line example</button>
+    <label class="muted" for="model">Rate:
+      <select id="model">
+        <option value="2,0.10" selected>Claude Sonnet 5.5 API - $2 / MTok input</option>
+        <option value="3,0.30">Claude Sonnet 4.5 API - $3 / MTok input</option>
+        <option value="5,0.50">Claude Opus 4.5 API - $5 / MTok input</option>
+        <option value="1,0.10">Claude Haiku 4.5 API - $1 / MTok input</option>
+      </select>
+    </label>
   </div>
   <p class="privacy">Runs entirely in this tab. Close it and your text is gone.</p>
 
@@ -53,20 +63,21 @@
       <div class="card"><div class="n" id="cChars">-</div><div class="l">characters</div></div>
       <div class="card"><div class="n" id="cTok">-</div><div class="l">est. tokens (chars / 4)</div></div>
       <div class="card"><div class="n" id="cWin">-</div><div class="l">of a 200k context window</div></div>
-      <div class="card"><div class="n" id="cCost">-</div><div class="l">est. input cost per session</div></div>
-      <div class="card"><div class="n" id="cYear">-</div><div class="l">est. per year, 20 sessions/week</div></div>
+      <div class="card"><div class="n" id="cCost">-</div><div class="l">est. uncached API input cost, one session</div></div>
+      <div class="card"><div class="n" id="cCache">-</div><div class="l">same read as a cache hit</div></div>
     </div>
+    <div class="assume" id="assumeBox"></div>
     <div class="verdict" id="verdict"></div>
 
-    <h2>Your most expensive lines</h2>
-    <p class="muted">The ten longest lines, by estimated tokens. Long prose lines are usually the first thing to move into a linked doc the agent reads only when needed.</p>
+    <h2>Your longest lines</h2>
+    <p class="muted">The ten longest lines, by estimated tokens. Long prose lines are candidates for moving into a separate doc the agent opens only when needed.</p>
     <table><thead><tr><th>#</th><th>line</th><th>est. tokens</th><th>preview</th></tr></thead><tbody id="rows"></tbody></table>
 
-    <h2>How this estimate works</h2>
-    <p class="muted">Token estimate: characters divided by 4 (a rough average for English + code; a real tokenizer will differ, usually by less than 20%). Cost estimate: $3 per million input tokens, a typical mid-tier model list price at the time of writing - check your provider's current pricing. Prompt caching can reduce repeat-read cost substantially; this shows the uncached worst case. The context-window figure assumes a 200k window.</p>
+    <h2>What this estimate does and doesn't show</h2>
+    <p class="muted">Token estimate: characters divided by 4, a rough average for English and code. Anthropic notes that models from Claude 4.7 on use a tokenizer that produces about 30% more tokens for the same text, so treat this as a floor, not an exact count. One "session" here means the file is loaded into context once; real sessions add conversation, tool output, and re-reads on top. Cost uses the first-party API list price you selected (source: docs.claude.com/en/docs/about-claude/pricing, checked Nov 13, 2026), uncached, per million input tokens. Prompt caching makes repeat reads far cheaper (the cache-hit figure above). If you use a flat-rate plan like Pro or Max, tokens are not metered per request - for you this file costs context-window room, not money. Nothing here measures whether the instructions work, only what they weigh.</p>
 
     <div class="cta">
-      <strong>Want the lean version?</strong> The Agentic Coding Kit ships CLAUDE.md templates built to stay small, a rule-enforcement hook, and the splitting pattern that keeps big docs out of the context window until they're needed.
+      <strong>Want a smaller file that still does the job?</strong> The Agentic Coding Kit ships CLAUDE.md templates built to stay lean, plus the splitting pattern that keeps reference docs out of the context window until they're needed.
       <a href="https://kitforgedev.itch.io/agentic-coding-kit">Get the free sampler on itch.io</a>
     </div>
   </div>
@@ -85,30 +96,37 @@ $('sample').onclick = () => {
   $('src').value = s;
   analyze(s);
 };
+$('model').onchange = () => { if ($('out').style.display === 'block') analyze($('src').value); };
+function money(c) { return c < 0.01 ? '< $0.01' : '$' + c.toFixed(3); }
 function analyze(text) {
   if (!text.trim()) return;
+  const [rate, cacheRate] = $('model').value.split(',').map(Number);
   const chars = text.length;
   const lines = text.split('\n');
   const tokens = Math.round(chars / 4);
   const win = tokens / 200000;
-  const cost = tokens / 1e6 * 3;
+  const cost = tokens / 1e6 * rate;
+  const cacheCost = tokens / 1e6 * cacheRate;
   const year = cost * 20 * 52;
   $('cLines').textContent = fmt(lines.length);
   $('cChars').textContent = fmt(chars);
   $('cTok').textContent = fmt(tokens);
   $('cWin').textContent = (win * 100).toFixed(1) + '%';
-  $('cCost').textContent = cost < 0.01 ? '< $0.01' : '$' + cost.toFixed(3);
-  $('cYear').textContent = year < 1 ? '< $1' : '$' + fmt(Math.round(year));
+  $('cCost').textContent = money(cost);
+  $('cCache').textContent = money(cacheCost);
+  $('assumeBox').innerHTML = 'Assumptions: one session = this file loaded once, uncached, at the selected API rate ($' + rate + '/MTok input). '
+    + 'At 20 uncached sessions a week for a year that read alone adds up to about ' + (year < 1 ? '< $1' : '$' + fmt(Math.round(year))) + '. '
+    + 'With prompt caching, repeat reads bill as cache hits ($' + cacheRate + '/MTok on this model). Flat-rate Pro/Max plans are not metered per token.';
   const v = $('verdict');
   if (win < 0.02) {
     v.className = 'verdict good';
-    v.innerHTML = '<strong>Lean.</strong> Under 2% of the context window. Your instructions are cheap to re-read every session - keep them this way.';
+    v.innerHTML = '<strong>Lean.</strong> Under 2% of a 200k window. Cheap to load every session and easy to keep current.';
   } else if (win < 0.10) {
     v.className = 'verdict meh';
-    v.innerHTML = '<strong>Getting heavy.</strong> Over 2% of every window goes to standing instructions. Move reference material into linked docs the agent opens only when it needs them.';
+    v.innerHTML = '<strong>Getting heavy.</strong> This file alone would take ' + (win*100).toFixed(1) + '% of a 200k window at session start. Worth checking whether everything in it still earns its place, and moving reference material into linked docs.';
   } else {
     v.className = 'verdict bad';
-    v.innerHTML = '<strong>Expensive.</strong> More than 10% of every context window is spent before the first prompt. Long instructions also dilute each other - rules near the middle get ignored. Split hard.';
+    v.innerHTML = '<strong>Large.</strong> This file alone would take ' + (win*100).toFixed(1) + '% of a 200k window at session start, before your prompt and any tool output. Splitting reference material into docs the agent reads on demand keeps the standing file small and easier to maintain.';
   }
   const longest = lines
     .map((l, i) => ({ i: i + 1, l, t: Math.round(l.length / 4) }))
