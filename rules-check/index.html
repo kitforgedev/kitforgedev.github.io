@@ -49,10 +49,10 @@
     <div id="results"></div>
 
     <h2>What this checks (and what it can't)</h2>
-    <p class="muted">These are structural checks: things that are verifiably right or wrong from the file's text. Whether your rules are <em>good instructions</em> - specific, testable, ordered - is a judgment this page doesn't make. Format references: Cursor's .mdc frontmatter (description, globs, alwaysApply) follows Cursor's public docs; Claude Code loads CLAUDE.md at session start; AGENTS.md is the cross-tool convention adopted by several agents. Token estimates use the rough 4-characters-per-token average and can be off in either direction.</p>
+    <p class="muted">The frontmatter and glob checks are structural - verifiable from the file's text against <a href="https://cursor.com/docs/context/rules">Cursor's documented rule types</a> (Always Apply, Apply Intelligently, Apply Manually, and glob auto-attach). The size, contradiction, and hedged-wording checks are heuristics: they surface lines for your review and can be wrong. In our own <a href="/claude-md-survey/">12-repo survey</a>, both contradiction flags were false positives - treat heuristic warnings as review prompts, not verdicts. Whether your rules are <em>good instructions</em> is a judgment this page doesn't make. Claude Code loads CLAUDE.md at session start; AGENTS.md is the cross-tool convention adopted by several agents. Token estimates use the rough 4-characters-per-token average and can be off in either direction.</p>
 
     <div class="cta">
-      <strong>Want rules that pass on the first try?</strong> The Agentic Coding Kit ships tested CLAUDE.md presets for 5 stacks and 6 Cursor .mdc rules with correct frontmatter, plus the hooks that enforce them.
+      <strong>Want rules that pass on the first try?</strong> The Agentic Coding Kit ships CLAUDE.md presets for 5 stacks and 6 Cursor .mdc rules that pass these structural checks, plus optional hook scripts you can adapt.
       <a href="https://kitforgedev.itch.io/agentic-coding-kit">Get the free sampler on itch.io</a> - and if your file is long, run it through the <a href="/claude-md-cost/">cost checker</a> too.
     </div>
   </div>
@@ -116,14 +116,15 @@ function run(text) {
       const hasGlobs = 'globs' in fm && fm.globs.length > 0;
       const always = (fm.alwaysApply || '').toLowerCase() === 'true';
       if (hasDesc) add('pass', 'description present', 'Agents that pick rules by description can route this one. "' + esc(fm.description.slice(0, 80)) + (fm.description.length > 80 ? '...' : '') + '"');
-      else add('fail', 'No description', 'Without a description, agent-selected rules have nothing to match against. Add one sentence saying when this rule applies.');
+      else if (always) add('pass', 'No description, but alwaysApply: true', 'With alwaysApply: true the rule loads every session; Cursor ignores the description, so none is needed.');
+      else add('warn', 'No description', 'Without a description, Cursor cannot auto-select this rule by relevance - it loads only via globs or a manual @-mention. Add one sentence saying when this rule applies if you want it auto-selected.');
       if (always && hasGlobs) add('warn', 'alwaysApply: true AND globs set', 'With alwaysApply: true the globs are ignored - the rule loads every time. Drop one: keep globs for file-scoped rules, or alwaysApply for global ones.');
-      if (!always && !hasGlobs && !hasDesc) add('fail', 'Rule can never activate', 'alwaysApply is not true, no globs are set, and there is no description - Cursor has no way to decide when to load this rule.');
+      if (!always && !hasGlobs && !hasDesc) add('warn', 'Manual-only rule', 'No alwaysApply, no globs, no description: this rule loads only when someone @-mentions it in chat. If that is the intent, fine; otherwise add a description or globs.');
       if (!always && hasGlobs) {
         const globs = fm.globs.split(',').map(g => g.trim()).filter(Boolean);
         let bad = [];
         globs.forEach(g => { const i = checkGlob(g); if (i.length) bad.push('"' + esc(g) + '" (' + i.join(', ') + ')'); });
-        if (bad.length) add('fail', bad.length + ' of ' + globs.length + ' glob patterns look broken', bad.join('; ') + '. A broken glob silently matches nothing.');
+        if (bad.length) add('fail', bad.length + ' of ' + globs.length + ' glob patterns look broken', bad.join('; ') + '. Check it against your file tree - it may silently match nothing.');
         else add('pass', globs.length + ' glob pattern' + (globs.length > 1 ? 's' : '') + ' structurally OK', esc(globs.join(', ')));
       }
       if (!always && !hasGlobs && hasDesc) add('pass', 'Agent-selected rule', 'No globs and not always-on: this rule activates by description matching. The description carries everything, so keep it specific.');
@@ -143,17 +144,17 @@ function run(text) {
   const soften = lines.filter(x => /\b(sometimes|if needed|when you can|if possible|occasionally)\b/i.test(x.l));
   if (hasAlways.length && soften.length) contradictions.push('line ' + hasAlways[0].i + ' says "always" but line ' + soften[0].i + ' carves out an exception');
   if (hasNever.length && soften.length) contradictions.push('line ' + hasNever[0].i + ' says "never" but line ' + soften[0].i + ' carves out an exception');
-  if (contradictions.length) add('warn', 'Possible contradiction', esc(contradictions[0]) + '. Absolute rules with scattered exceptions are a common reason agents follow neither. Put the exception inside the rule itself.');
+  if (contradictions.length) add('warn', 'Possible contradiction', esc(contradictions[0]) + '. This pairing is heuristic and can be wrong: check whether the two lines actually concern the same rule. If they do, put the exception inside the rule itself.');
   else add('pass', 'No absolute-with-exception pattern found', 'No "always/never" rule clashing with a "sometimes/if possible" line.');
 
   const vague = lines.filter(x => /\b(try to|maybe|please remember|if you can|consider)\b/i.test(x.l));
-  if (vague.length) add('warn', vague.length + ' soft instruction line' + (vague.length > 1 ? 's' : ''), 'Lines ' + vague.slice(0, 5).map(x => x.i).join(', ') + ' use hedged wording ("try to", "maybe", "if you can"). Agents treat hedges as optional. Make it a rule or delete it.');
+  if (vague.length) add('warn', vague.length + ' soft instruction line' + (vague.length > 1 ? 's' : ''), 'Lines ' + vague.slice(0, 5).map(x => x.i).join(', ') + ' contain hedge words ("try to", "maybe", "if you can"). Review each: turn real requirements into firm rules, cut the rest. A negation ("do not try to...") is a firm rule, not a hedge.');
   else add('pass', 'No hedged instructions', 'Every instruction line reads as a rule, not a suggestion.');
 
   const fails = results.filter(r => r.cls === 'fail').length;
   const warns = results.filter(r => r.cls === 'warn').length;
-  $('summary').innerHTML = fails ? '<strong style="color:var(--bad)">' + fails + ' problem' + (fails > 1 ? 's' : '') + ' that will break loading</strong>' + (warns ? ' and ' + warns + ' warning' + (warns > 1 ? 's' : '') : '') + ':'
-    : warns ? '<strong style="color:var(--warn)">No load-breaking problems</strong>, ' + warns + ' thing' + (warns > 1 ? 's' : '') + ' worth fixing:'
+  $('summary').innerHTML = fails ? '<strong style="color:var(--bad)">' + fails + ' structural problem' + (fails > 1 ? 's' : '') + '</strong>' + (warns ? ' and ' + warns + ' warning' + (warns > 1 ? 's' : '') + ' to review' : '') + ':'
+    : warns ? '<strong style="color:var(--warn)">No structural problems</strong>, ' + warns + ' thing' + (warns > 1 ? 's' : '') + ' to review:'
     : '<strong style="color:var(--accent)">All checks pass.</strong>';
   $('results').innerHTML = results.map(r => {
     const icon = r.cls === 'pass' ? '&#9989;' : r.cls === 'warn' ? '&#9888;&#65039;' : '&#10060;';
