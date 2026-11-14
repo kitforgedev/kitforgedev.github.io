@@ -101,10 +101,13 @@ function run(text) {
   const add = (cls, t, d) => results.push({ cls, t, d });
   const chars = text.length;
   const tokens = Math.round(chars / 4);
-  const looksMdc = /^---\r?\n/.test(text) || /alwaysApply|globs\s*:/.test(text.slice(0, 400));
+  const parsed0 = /^---\r?\n/.test(text) ? parseFrontmatter(text) : null;
+  const looksMdc = parsed0
+    ? ['description', 'globs', 'alwaysApply'].some(k => k in parsed0.fm)
+    : /alwaysApply|globs\s*:/.test(text.slice(0, 400));
 
   if (looksMdc) {
-    const parsed = parseFrontmatter(text);
+    const parsed = parsed0 || parseFrontmatter(text);
     if (!parsed) {
       add('fail', 'Unparseable frontmatter', 'The file starts like an .mdc rule but the --- frontmatter block does not close properly. Cursor will not read the metadata.');
     } else {
