@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What 12 real CLAUDE.md files from major repos look like - KitForge</title>
+<meta name="description" content="We fetched the root CLAUDE.md from 12 well-known repos at pinned commits, measured them, and hand-reviewed every lint flag. Median file is tiny; two are heavy; most heuristic flags were false positives.">
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --ink:#e8ecf1; --dim:#9aa6b2; --accent:#6ee7b7; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:820px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:1.8rem; line-height:1.2; margin:0 0 8px; }
+  h2 { font-size:1.15rem; margin:32px 0 8px; }
+  p.sub { color:var(--dim); margin:0 0 24px; }
+  .muted { color:var(--dim); font-size:.85rem; }
+  a { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; margin-top:12px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #2a3340; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  code { font:0.85em ui-monospace,SFMono-Regular,Menlo,monospace; }
+  blockquote { margin:10px 0; padding:10px 14px; border-left:3px solid var(--warn); background:var(--card); color:var(--dim); font-size:.85rem; border-radius:0 8px 8px 0; }
+  .cta { margin-top:36px; padding:20px; border:1px solid var(--accent); border-radius:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>What 12 real CLAUDE.md files from major repos look like</h1>
+  <p class="sub">We pulled the root <code>CLAUDE.md</code> from 12 well-known repositories at pinned commits on November 14, 2026, measured each one, and hand-reviewed every flag our <a href="/rules-check/">rules checker</a> raised. Published November 14, 2026.</p>
+
+  <h2>The short version</h2>
+  <p>Most projects keep this file small. The median is 348 estimated tokens, and 9 of the 12 sit under 2,000. Three files are nothing but pointers to other docs - with an important caveat: a pointer root is only cheap if the file it points to is, because agents that follow the pointer load that file too. We measured root files only, so pointer repos' true instruction weight is understated here. Three files carry real weight: Electron (~3,490), Bun (~4,379) and PyTorch (~4,364), about 1.7% to 2.2% of a 200k context window, every session. And our checker's heuristic warnings mostly did not survive manual review - details below, including a real bug the survey caught in our own tool.</p>
+
+  <h2>The files</h2>
+  <table>
+    <tr><th>Repo</th><th class="num">Stars</th><th class="num">Chars</th><th class="num">Est. tokens</th><th>What's in it</th></tr>
+    <tr><td><a href="https://github.com/react/react/blob/df6aa4ec76cff5b3adde531c6fe8c36099e0469b/CLAUDE.md">react/react</a></td><td class="num">252,603</td><td class="num">359</td><td class="num">~90</td><td>Orientation: monorepo layout, plus current active work and branch</td></tr>
+    <tr><td><a href="https://github.com/anthropics/claude-code/blob/6b371b2da1ca9d634fe763aed04542af2d4a6b82/CLAUDE.md">anthropics/claude-code</a></td><td class="num">155,638</td><td class="num">2,218</td><td class="num">~555</td><td>Style and workflow rules</td></tr>
+    <tr><td><a href="https://github.com/excalidraw/excalidraw/blob/3a317b55f508815d10a4c12acca99df30f026521/CLAUDE.md">excalidraw/excalidraw</a></td><td class="num">135,671</td><td class="num">1,295</td><td class="num">~324</td><td>Project conventions</td></tr>
+    <tr><td><a href="https://github.com/electron/electron/blob/139c603a2a0b431de5b22b6da5a1cd37d00314c2/CLAUDE.md">electron/electron</a></td><td class="num">123,900</td><td class="num">13,960</td><td class="num">~3,490</td><td>Safety rules (never <code>npx</code>), project overview, dev guide</td></tr>
+    <tr><td><a href="https://github.com/pytorch/pytorch/blob/290c13bd58a2d0a81e7e644e2eb57107bb6dccce/CLAUDE.md">pytorch/pytorch</a></td><td class="num">105,483</td><td class="num">17,455</td><td class="num">~4,364</td><td>Agent governance: mandatory AI-contribution policy, then build/test rules</td></tr>
+    <tr><td><a href="https://github.com/localsend/localsend/blob/2e7ef1972b0b4e210608ec77ef5fad334f798f7e/CLAUDE.md">localsend/localsend</a></td><td class="num">98,962</td><td class="num">268</td><td class="num">~67</td><td>Short conventions</td></tr>
+    <tr><td><a href="https://github.com/oven-sh/bun/blob/9098897a17372d46559d1a68a44061f493546631/CLAUDE.md">oven-sh/bun</a></td><td class="num">96,693</td><td class="num">17,517</td><td class="num">~4,379</td><td>Build/test discipline (<code>bun bd</code> workflow), CI and PR rules</td></tr>
+    <tr><td><a href="https://github.com/ansible/ansible/blob/b4b2b1e82a535d27f902a71fc8396c3af138fca2/CLAUDE.md">ansible/ansible</a></td><td class="num">71,463</td><td class="num">56</td><td class="num">~14</td><td>Three pointer lines (<code>@AGENTS.md</code> etc.)</td></tr>
+    <tr><td><a href="https://github.com/twentyhq/twenty/blob/1dd1c249ad213de6883be5296deb3bbba8420a22/CLAUDE.md">twentyhq/twenty</a></td><td class="num">60,921</td><td class="num">6,831</td><td class="num">~1,708</td><td>Conventions and workflow</td></tr>
+    <tr><td><a href="https://github.com/JetBrains/kotlin/blob/e12dc36e784c4c65886009eb622504b3db65b699/CLAUDE.md">JetBrains/kotlin</a></td><td class="num">53,575</td><td class="num">442</td><td class="num">~111</td><td>Metadata frontmatter plus pointers to <code>.ai/guidelines.md</code></td></tr>
+    <tr><td><a href="https://github.com/modelcontextprotocol/python-sdk/blob/77001c96f9507be0f4d009b83210a384a5e08bda/CLAUDE.md">modelcontextprotocol/python-sdk</a></td><td class="num">24,859</td><td class="num">11</td><td class="num">~3</td><td>One pointer: <code>@AGENTS.md</code></td></tr>
+    <tr><td><a href="https://github.com/saaspegasus/pegasus-docs/blob/65f7ebb4684fdfc1431bfba9a8d650fa89d61aa8/CLAUDE.md">saaspegasus/pegasus-docs</a></td><td class="num">33</td><td class="num">1,487</td><td class="num">~372</td><td>Docs-site conventions</td></tr>
+  </table>
+  <p class="muted">Stars and licenses per the GitHub API on Nov 14, 2026 (licenses: MIT for electron, excalidraw, react, python-sdk; Apache-2.0 for localsend; GPL-3.0 for ansible; other/NOASSERTION for bun, pytorch, twenty; none detected for kotlin, claude-code, pegasus-docs). Token estimates use the rough 4-characters-per-token average and can be off in either direction.</p>
+
+  <h2>What we found</h2>
+  <p><strong>1. The pattern is "small file, big pointers."</strong> The three shortest files (11, 56, 268 chars) defer to AGENTS.md or dedicated guideline docs. React goes further and uses the file for live context: it names the current active work and branch. The file is cheapest when it points instead of repeats - but note the limits of that: the sizes in this table are root files only. A pointer repo's real per-session load includes whatever the agent pulls in by following the pointer, which we did not measure.</p>
+  <p><strong>2. Three files carry real weight.</strong> Electron (~3,490 est. tokens) is safety rules plus a dev guide; Bun (~4,379) is mostly build and test discipline; PyTorch (~4,364) leads with a mandatory AI-contribution policy. At the Claude Sonnet 5.5 list price of $2 per million input tokens (<a href="https://docs.claude.com/en/docs/about-claude/pricing">source</a>, checked Nov 13, 2026), even the largest costs under a cent per session load. The real cost is context-window room: 1.7% to 2.2% of a 200k window, every session, before the first prompt.</p>
+  <p><strong>3. Content clusters into four jobs:</strong> orientation (what this repo is), operational discipline (how to build and test here), agent governance (what the agent may do on GitHub), and pointers. PyTorch's governance section is the clearest example of the third: agents must never act autonomously on GitHub, must label AI-generated content, and must open unreviewed PRs as drafts.</p>
+  <p><strong>4. Heuristic lint flags need a human pass.</strong> Our checker raised two "possible contradiction" flags (it pairs the first line containing "always" or "never" with the first line containing a softener like "if needed"). Both were false positives: in Bun, an always-rule about test ports was paired with an unrelated PR-comments line 131 lines away; in PyTorch, an always-rule about draft PRs was paired with an "if needed" that is not an exception to it. Of PyTorch's four hedged-wording flags, two were genuine suggestions ("please try to put it back on a single line", line 238; "you can also consider writing to local files", line 349), one was a negation ("Do NOT try to find alternatives", line 50 - a firm rule, not a hedge), and one was borderline ("consider two user personas", line 314). Treat these flags as review prompts, not verdicts.</p>
+  <p><strong>5. The survey caught a bug in our own checker.</strong> Kotlin's file opens with YAML-style metadata frontmatter (<code>project:</code>, <code>languages:</code>, ...). Our first pass treated any file starting with <code>---</code> as a Cursor .mdc rule and reported two load-breaking failures that do not exist. We fixed the classifier the same day - it now applies .mdc checks only when the frontmatter actually contains .mdc keys (description, globs, or alwaysApply) - and re-ran the whole sample. Regression behavior on genuinely broken .mdc files is unchanged.</p>
+
+  <h2>Method</h2>
+  <p class="muted">Sample: repositories named in dexio.wiki's guide "CLAUDE.md examples: what 270 top GitHub repos put in them" plus the source list of ArthurClune/claude-md-examples, included if a root CLAUDE.md was fetchable at a pinned commit on Nov 14, 2026. Sizes are root files only; pointer targets (AGENTS.md, .ai/guidelines.md) are not included. microsoft/playwright and p33m5t3r/vibecoding had no root CLAUDE.md and are excluded (documented, not silently dropped). Files were fetched from raw.githubusercontent.com at the commits linked in the table, so every row is reproducible. Analysis ran the exact logic of our <a href="/rules-check/">rules checker</a> in a script; every non-pass flag was then reviewed by hand against the file, and false positives are reported as such above. Short quoted lines are reproduced for commentary and criticism, with attribution.</p>
+
+  <div class="cta">
+    <strong>Check your own file.</strong> Paste your CLAUDE.md, AGENTS.md, or .mdc rule into the <a href="/rules-check/">AI rules sanity check</a> - it runs in your browser and uploads nothing. If it's long, the <a href="/claude-md-cost/">cost checker</a> estimates what it weighs per session. The free sampler of our Agentic Coding Kit is on <a href="https://kitforgedev.itch.io/agentic-coding-kit">itch.io</a>.
+  </div>
+</main>
+</body>
+</html>
