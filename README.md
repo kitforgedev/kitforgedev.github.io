@@ -13,4 +13,5 @@ Small free tools for people who work with AI coding agents. Everything runs as s
 
 ## Kit
 
+- **[Next.js Instruction Pack](https://kitforgedev.itch.io/nextjs-instruction-pack)** (paid, $19) - AGENTS.md, CLAUDE.md, Cursor rules, and Copilot instructions for a Next.js App Router + TypeScript repo. Conventions verified against the Next.js 16 docs that ship in node_modules; includes a structural validation script that runs against your own repo.
 - **[Agentic Coding Kit](https://kitforgedev.itch.io/agentic-coding-kit)** - templates, presets, hooks, and CI checks for agent coding workflows. A free sampler is on the itch page.
