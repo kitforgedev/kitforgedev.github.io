@@ -128,7 +128,7 @@ function run(fname, text) {
       add('pass','Frontmatter block found','Opening and closing --- markers parsed.');
       const keys = Object.keys(fm.fm);
       const applyKey = keys.find(k => k === 'applyTo');
-      const typoKey = keys.find(k => k.toLowerCase() === 'applyto' && k !== 'applyTo');
+      const typoKey = keys.find(k => k.toLowerCase().replace(/_/g,'') === 'applyto' && k !== 'applyTo');
       if (!applyKey) {
         add('fail','No applyTo key in frontmatter','Path-specific instructions need applyTo with a glob so Copilot knows which files they apply to.' + (typoKey ? ' Found "' + esc(typoKey) + '" - the documented key is applyTo (case-sensitive).' : ''));
       } else {
