@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copilot instructions sanity check (copilot-instructions.md, .instructions.md) - KitForge</title>
+<meta name="description" content="Paste a GitHub Copilot repository instructions file and get instant structural checks: file location, applyTo frontmatter, glob syntax, and size. Free, runs in your browser, nothing is uploaded.">
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --ink:#e8ecf1; --dim:#9aa6b2; --accent:#6ee7b7; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:1.9rem; line-height:1.2; margin:0 0 8px; }
+  h2 { font-size:1.15rem; margin:32px 0 8px; }
+  p.sub { color:var(--dim); margin:0 0 24px; }
+  textarea { width:100%; min-height:220px; background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:10px; padding:14px; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  input[type=text] { width:100%; background:var(--card); color:var(--ink); border:1px solid #2a3340; border-radius:10px; padding:10px 14px; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin-bottom:12px; }
+  .row { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  button { background:var(--accent); color:#06281c; border:0; border-radius:8px; padding:12px 22px; font-size:1rem; font-weight:600; cursor:pointer; }
+  .ghost { background:transparent; color:var(--dim); border:1px solid #2a3340; }
+  .result { margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--card); border:1px solid #2a3340; display:flex; gap:12px; align-items:flex-start; }
+  .result .icon { font-size:1.1rem; line-height:1.4; }
+  .result.pass { border-left:4px solid var(--accent); }
+  .result.warn { border-left:4px solid var(--warn); }
+  .result.fail { border-left:4px solid var(--bad); }
+  .result .t { font-weight:600; }
+  .result .d { color:var(--dim); font-size:.9rem; margin-top:2px; }
+  .muted { color:var(--dim); font-size:.85rem; }
+  a { color:var(--accent); }
+  .cta { margin-top:36px; padding:20px; border:1px solid var(--accent); border-radius:12px; }
+  .privacy { color:var(--dim); font-size:.8rem; margin-top:10px; }
+  .summary { margin-top:24px; font-size:1.05rem; }
+  label.flabel { color:var(--dim); font-size:.85rem; display:block; margin-bottom:6px; }
+  #out { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Copilot instructions sanity check</h1>
+  <p class="sub">Paste a GitHub Copilot repository instructions file below - a repo-wide <code>.github/copilot-instructions.md</code>, a path-specific <code>.github/instructions/NAME.instructions.md</code>, or an <code>AGENTS.md</code>. This runs structural checks against <a href="https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions">GitHub's documented requirements</a>. It runs entirely in your browser.</p>
+
+  <label class="flabel" for="fname">Path of the file in your repo</label>
+  <input type="text" id="fname" value=".github/instructions/api.instructions.md" spellcheck="false">
+  <textarea id="src" placeholder="Paste your instructions file here..." spellcheck="false"></textarea>
+  <div class="row">
+    <button id="go">Run checks</button>
+    <button class="ghost" id="sample">Try a broken example</button>
+  </div>
+  <p class="privacy">Runs entirely in this tab. Close it and your text is gone.</p>
+
+  <div id="out">
+    <p class="summary" id="summary"></p>
+    <div id="results"></div>
+
+    <h2>What this checks (and what it can't)</h2>
+    <p class="muted">The location, filename, frontmatter, and <code>applyTo</code> checks are structural - verifiable from the file's text against GitHub's documentation for repository custom instructions. The size and content checks are heuristics: they surface things for your review and can be wrong. Whether your instructions are <em>good guidance</em> is a judgment this page doesn't make, and only GitHub's own onboarding template's limits ("no longer than 2 pages", "must not be task specific") back the length warning - it is a guideline, not a hard limit. Token estimates use the rough 4-characters-per-token average and can be off in either direction. This page cannot test whether Copilot actually applies your instructions in a session - no structural check can.</p>
+
+    <div class="cta">
+      <strong>Working in Cursor or Claude Code too?</strong> We ship free checkers for those: the <a href="/rules-check/">rules sanity check</a> (.mdc, CLAUDE.md, AGENTS.md) and the <a href="/claude-md-cost/">CLAUDE.md cost checker</a>. Our <a href="https://kitforgedev.itch.io/agentic-coding-kit">Agentic Coding Kit on itch.io</a> ships presets for Cursor and Claude Code (free sampler available) - we don't ship Copilot-specific presets, this checker is standalone.
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+$('go').onclick = () => run($('fname').value.trim(), $('src').value);
+$('sample').onclick = () => {
+  $('fname').value = '.github/instructions/api.instructions.md';
+  $('src').value = `---
+apply_to: "app/api/**"
+excludeAgent: "chat"
+---
+# API rules
+
+Try to write good code. Please remember to maybe add validation when you can.
+
+` + 'Follow the existing patterns in the codebase and keep things consistent. '.repeat(160);
+  run($('fname').value.trim(), $('src').value);
+};
+
+function parseFrontmatter(text) {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!m) return null;
+  const fm = {};
+  m[1].split('\n').forEach(line => {
+    const kv = line.match(/^\s*([\w-]+)\s*:\s*(.*)$/);
+    if (kv) fm[kv[1].trim()] = kv[2].trim();
+  });
+  return { fm, body: text.slice(m[0].length) };
+}
+
+function stripQuotes(v) { return v.replace(/^["']|["']$/g, ''); }
+
+function run(fname, text) {
+  const res = [];
+  const add = (kind, t, d) => res.push({kind, t, d});
+
+  if (!text.trim()) { add('fail','Empty file','Paste the contents of your instructions file.'); return render(res); }
+
+  const base = fname.split('/').pop();
+  const isRepoWide = base === 'copilot-instructions.md';
+  const isPathSpecific = base.endsWith('.instructions.md') && base !== '.instructions.md' && !isRepoWide;
+  const isAgents = base === 'AGENTS.md';
+  const looksInstructionsDir = fname.replace(/\\/g,'/').includes('.github/instructions');
+
+  // --- type + location (documented) ---
+  if (isRepoWide) {
+    if (fname.replace(/\\/g,'/') === '.github/copilot-instructions.md') add('pass','Repo-wide file at the documented location','.github/copilot-instructions.md applies to all requests made in the context of the repository.');
+    else add('warn','Repo-wide file, unexpected path','GitHub documents the repo-wide file at .github/copilot-instructions.md - at any other path it is not picked up as repository-wide instructions.');
+  } else if (isPathSpecific) {
+    if (looksInstructionsDir) add('pass','Path-specific file in the documented directory','NAME.instructions.md files live within or below .github/instructions/ (subdirectories are allowed).');
+    else add('fail','Path-specific file outside .github/instructions/','GitHub documents path-specific instructions only within or below .github/instructions/ - this file would not be picked up from ' + esc(fname || '(no path given)') + '.');
+  } else if (isAgents) {
+    add('pass','AGENTS.md recognized','Copilot supports AGENTS.md files stored anywhere in the repository; the nearest AGENTS.md in the directory tree takes precedence. A single CLAUDE.md or GEMINI.md at the repository root is a documented alternative.');
+  } else if (base.endsWith('.md') && base.includes('instructions')) {
+    add('fail','Filename does not end with .instructions.md','The file name must end with .instructions.md (for example api.instructions.md). "' + esc(base) + '" does not match the documented pattern.');
+  } else {
+    add('warn','Unrecognized instructions file name','Documented names: .github/copilot-instructions.md (repo-wide), .github/instructions/NAME.instructions.md (path-specific), AGENTS.md anywhere (agents). Check the path field above.');
+  }
+
+  // --- frontmatter ---
+  const fm = parseFrontmatter(text);
+  if (isPathSpecific) {
+    if (!fm) {
+      const hasTypo = /^---\r?\n[\s\S]*apply_to\s*:/m.test(text);
+      add('fail','No frontmatter block','GitHub documents a frontmatter block containing the applyTo keyword at the start of every path-specific .instructions.md file.' + (hasTypo ? ' You wrote apply_to - the documented key is applyTo (case-sensitive).' : ''));
+    } else {
+      add('pass','Frontmatter block found','Opening and closing --- markers parsed.');
+      const keys = Object.keys(fm.fm);
+      const applyKey = keys.find(k => k === 'applyTo');
+      const typoKey = keys.find(k => k.toLowerCase() === 'applyto' && k !== 'applyTo');
+      if (!applyKey) {
+        add('fail','No applyTo key in frontmatter','Path-specific instructions need applyTo with a glob so Copilot knows which files they apply to.' + (typoKey ? ' Found "' + esc(typoKey) + '" - the documented key is applyTo (case-sensitive).' : ''));
+      } else {
+        const raw = fm.fm[applyKey];
+        if (!stripQuotes(raw).trim()) {
+          add('fail','applyTo is empty','An empty applyTo matches nothing. Add a glob like "app/models/**/*.rb" or "**/*.ts,**/*.tsx".');
+        } else {
+          const quoted = /^".*"$/.test(raw) || /^'.*'$/.test(raw);
+          const inner = stripQuotes(raw);
+          if (!quoted && /,/.test(inner)) add('warn','Multiple patterns without quotes','GitHub\'s examples wrap comma-separated patterns in quotes: applyTo: "**/*.ts,**/*.tsx". Unquoted commas can be misread by YAML parsers.');
+          const patterns = inner.split(',');
+          let globFails = 0;
+          patterns.forEach(p => {
+            const g = p.trim();
+            if (!g) { add('fail','Empty pattern in applyTo','A comma created an empty entry in ' + esc(inner) + '.'); globFails++; return; }
+            if (/^["']|["']$/.test(g) && !(quoted)) { add('warn','Mixed quoting in pattern list','Pattern "' + esc(g) + '" has stray quote characters.'); }
+            if (g.startsWith('/')) add('warn','Leading slash in glob','GitHub\'s documented examples are repo-root-relative without a leading slash: src/**/*.py, not /src/**/*.py. Pattern: ' + esc(g));
+            if (/^(\*|\*\*|\*\*\/\*)$/.test(g)) add('pass','Pattern "' + esc(g) + '" matches broadly','This applies the instructions to every file - fine when intended, but it duplicates what a repo-wide copilot-instructions.md is for.');
+          });
+          if (!globFails) add('pass','applyTo glob(s) present', patterns.length + ' pattern(s): ' + esc(inner));
+        }
+      }
+      if ('excludeAgent' in fm.fm) {
+        const v = stripQuotes(fm.fm.excludeAgent);
+        if (v === 'code-review') add('pass','excludeAgent: "code-review"','Documented: the file is then used by Copilot cloud agent but not by Copilot code review.');
+        else add('warn','excludeAgent value not documented','GitHub documents excludeAgent: "code-review". "' + esc(v) + '" is not a documented value - verify it does what you expect. Without excludeAgent, both code review and the cloud agent use the file.');
+      }
+    }
+  } else if (isRepoWide && fm) {
+    add('warn','Frontmatter in a repo-wide file','GitHub\'s documentation shows frontmatter (applyTo, excludeAgent) on path-specific .instructions.md files, not on .github/copilot-instructions.md. It may be ignored here.');
+  }
+
+  // --- size heuristics ---
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const chars = text.length;
+  const tokens = Math.round(chars / 4);
+  add(words > 1000 ? 'warn' : 'pass',
+    'Length: ~' + words + ' words (~' + tokens + ' tokens, rough)',
+    words > 1000
+      ? 'GitHub\'s own Copilot onboarding template caps instructions at "no longer than 2 pages". ~1,000 words is about two pages - this file is past that. Long instructions also cost context on every request they attach to.'
+      : 'Within GitHub\'s 2-page guideline from its own onboarding template. Token estimate uses the rough 4-characters-per-token average.');
+
+  // --- content heuristics ---
+  const body = (fm ? fm.body : text);
+  if (isRepoWide || isAgents) {
+    const hasCmd = /`[^`\n]*(npm|pnpm|yarn|make|pytest|go test|cargo|mvn|gradle|build|test|lint|run)[^`\n]*`|(^|\n)\s*\$?\s*(npm|pnpm|yarn|make|pytest|go test|cargo|mvn|gradle)\s/im.test(body);
+    add(hasCmd ? 'pass' : 'warn',
+      hasCmd ? 'Build/test commands documented' : 'No build or test commands found',
+      hasCmd ? 'GitHub\'s recommended contents include validated bootstrap/build/test/lint steps - you have command-like lines.' : 'Heuristic: GitHub\'s recommended contents for repo-wide instructions include validated build, test, and lint commands so the agent does not have to discover them. Consider adding yours.');
+  }
+  const hedges = (body.match(/\b(try to|please remember|maybe|if you can|consider)\b/gi) || []).length;
+  if (hedges > 0) add('warn', hedges + ' hedged phrase(s)', 'Heuristic: phrases like "try to", "maybe", "if you can" read as optional. GitHub\'s own template uses direct language for required behavior ("always run npm install before building"). Lines are not shown - search your file for them.');
+
+  render(res);
+}
+
+function render(res) {
+  const icons = {pass:'✓', warn:'!', fail:'✗'};
+  $('results').innerHTML = res.map(r =>
+    `<div class="result ${r.kind}"><span class="icon">${icons[r.kind]}</span><div><div class="t">${r.t}</div><div class="d">${r.d}</div></div></div>`
+  ).join('');
+  const f = res.filter(r=>r.kind==='fail').length, w = res.filter(r=>r.kind==='warn').length, p = res.filter(r=>r.kind==='pass').length;
+  $('summary').textContent = f ? `${f} structural problem(s), ${w} warning(s), ${p} passed` : (w ? `No structural problems. ${w} warning(s), ${p} passed` : `All ${p} checks passed`);
+  $('out').style.display = 'block';
+  $('out').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
